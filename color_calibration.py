@@ -1,9 +1,9 @@
 from numpy import ndarray
+from typing import Tuple
 from ColorCalibrationModel import color
 from ColorCalibrationModel import api
 from ColorCalibrationModel import colorspace
 from matplotlib import pyplot as plt
-import cv2 as cv
 
 class ColorCalibrator:
     def __init__(self, inp, inp_colorspace, ref_colorspace, index, dir_path, main_path,
@@ -11,20 +11,23 @@ class ColorCalibrator:
                 distance='de00',
                 gamma = 2,
                 linear = 'gamma', 
-                only_infer = False) -> None:
+                only_infer = False,
+                logging = True) -> None:
         '''
-            Parameters:
-                    inp  (ndarray): input image
-                    ref  (ndarray): reference image
-                    inp_colorspace (ndarray): color space of input image
-                    ref_colorspace (ndarray): color space of reference image
-                    index    (int): index of experiment to save data
-                    dir_path (str): path to the directory to save results
+        Parameters:
+            inp  (ndarray): input image
+            inp_colorspace (ndarray): color space of input image
+            ref_colorspace (ndarray): color space of reference image
+            index    (int): index of experiment to save data
+            dir_path (str): path to the directory to save results
+            main_path(str): path to the root directory of current experiment
+            logging (bool): flag, representing if logs are written in stdout
         '''
         self.index = index
         self.dir_path = dir_path
         self.main_path = main_path
         self.input_image = inp
+        self.logging = logging
         if not only_infer:
             self.inp_cs = inp_colorspace
             self.ref_cs = color.Color(ref_colorspace / 255, colorspace.sRGB)  
@@ -53,13 +56,14 @@ class ColorCalibrator:
         with open(f'{self.main_path}\\CCM_params.txt', 'a') as f:
             f.write(f'{self.index}.' + f'{ccm=}'.split('=')[0] + ' = ' + f'{ccm}\n')
     
-    def get_calibrated_image(self, return_ccm = False) -> ndarray:
+    def get_calibrated_image(self, return_ccm = False) -> Tuple[ndarray, ndarray]:
         '''
         Calibrates input image color space.
-                Returns:
-                        input_image_updated (ndarray)
+
+        Returns:
+            input_image_updated (ndarray)
         '''
-        print("inp_cs = ", self.inp_cs, " ref_cs = ", self.ref_cs.colors)
+        if self.logging: print("inp_cs = ", self.inp_cs, " ref_cs = ", self.ref_cs.colors)
         ccm = api.color_calibration(self.inp_cs / 255, self.ref_cs, 
             colorspace = colorspace.sRGB,
             ccm_shape = self.ccm_shape, 
@@ -70,9 +74,6 @@ class ColorCalibrator:
             initial_method = self.initial_method, 
             xtol = self.xtol, ftol = self.ftol
             )
-
-        # if ccm.error > 1e-5:
-        #     ccm.ccm = ccm.initial_white_balance()
 
         self.write_ccm(ccm.ccm)
 
@@ -85,11 +86,12 @@ class ColorCalibrator:
 
         return new_input_image
 
-    def apply_calibrating_mask(self, user_ccm):
+    def apply_calibrating_mask(self, user_ccm) -> ndarray:
         '''
         Calibrates input image color space using user CCM matrix.
-                Returns:
-                        input_image_updated (ndarray)
+    
+        Returns:
+            input_image_updated (ndarray)
         '''
         ccm = api.color_calibration(None, None, only_infer=True)
 

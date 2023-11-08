@@ -1,10 +1,9 @@
 from .linearize import *
-from scipy.optimize import minimize, fmin
+from scipy.optimize import fmin
 from .colorspace import *
 from .color import *
 from .utils import *
 from .distance import *
-from cv2 import cv2
 import numpy as np
 
 class CCM_3x3:
@@ -156,8 +155,6 @@ class CCM_3x3:
         '''infer using fittingd ccm'''
         if self.ccm is None:
             raise Exception('No CCM values!')
-        # self.ccm = self.ccm / np.max(self.ccm)
-        # print("ccm = ", self.ccm)
         img_lin = self.linear.linearize(img)
         img_ccm = img_lin@self.ccm
         if L:
@@ -190,8 +187,6 @@ class CCM_4x3(CCM_3x3):
         fitting nonlinear-optimization initial value by white balance:
         see CCM.pdf for details;
         '''
-        # print('src_rgbl', self.src_rgbl)
-        # print('dst_rgbl', self.src_rgbl)
         rs, gs, bs, *_ = np.sum(self.src_rgbl, axis = 0)
         rd, gd, bd, *_ = np.sum(self.dst_rgbl, axis = 0)
         return np.array([[rd/rs, 0, 0], [0, gd/gs, 0], [0, 0, bd/bs], [0, 0, 0]]) 

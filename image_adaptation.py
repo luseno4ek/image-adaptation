@@ -1,8 +1,8 @@
 from template_matching import *
 from extracting_color_spaces import *
 from color_calibration import *
-import cv2 as cv
 from collections import defaultdict
+from typing import Dict
 import numpy as np
 import datetime
 import pickle
@@ -10,19 +10,25 @@ import pickle
 
 
 class ImageAdaptator:
-    def __init__(self, index, dir_path, result_dir_path, main_path) -> None:
+    def __init__(self, index, dir_path, result_dir_path, main_path, 
+                 logging = True, save_test_imgs = True) -> None:
         '''
-            Parameters:
-                    inp  (ndarray): input image
-                    ref  (ndarray): reference image
-                    mask (ndarray): segmentation mask of reference image
-                    index    (int): index of experiment to save data
-                    dir_path (str): path to the directory to save results
+        Parameters:
+            inp  (ndarray): input image
+            ref  (ndarray): reference image
+            mask (ndarray): segmentation mask of reference image
+            index    (int): index of experiment to save data
+            dir_path (str): path to the directory to save results
+            main_path(str): path to the root directory of current experiment
+            logging (bool): flag, representing if logs are written in stdout  
+            save_test_imgs: flag, representing if test images are saved
         '''
         self.index = index
         self.dir_path = dir_path
         self.result_dir_path = result_dir_path
         self.main_path = main_path
+        self.logging = logging
+        self.save_test_imgs = save_test_imgs
         
     def DrawColorSpaceAndSave(self, colors, name):
         colors_without_none = []
@@ -41,9 +47,16 @@ class ImageAdaptator:
         f.savefig(f'{self.dir_path}/{name}_color_space.png')
 
     
-    def GetRefColorSpace(self, images, masks) -> np.array:
+    def GetRefColorSpace(self, images, masks, name) -> Dict:
+        '''
+        Gets colorspace dict from given images with masks.
+
+        Parameters:
+            images (list of ndarrays): input images
+            masks  (list of ndarrays): masks for input images
+            name                (str): name of experiment, used to save colorspace image file
+        '''
         colors = []
-        print(len(images))
         for i in range(len(images)):
             ref_image = images[i]
             ref_mask = masks[i][:, :, 0]
@@ -52,13 +65,13 @@ class ImageAdaptator:
             colors.append(ref_colors)
         colors = np.array(colors)
         ref_cs = np.nanmean(colors, axis=0)
-        self.DrawColorSpaceAndSave(ref_cs)
+        if self.save_test_imgs: self.DrawColorSpaceAndSave(ref_cs, name)
         cs_dict = self.GetColorspaceDictionary(ref_cs)
         with open(f'{self.main_path}/colorspace.pkl', 'wb') as f:
             pickle.dump(cs_dict, f)
         return cs_dict
     
-    def GetColorspaceDictionary(self, colors, ref_images = False):
+    def GetColorspaceDictionary(self, colors, ref_images = False) -> Dict:
         dict_colors = {}
         for i in range(len(colors)):
             color = colors[i][0][0]
@@ -67,39 +80,48 @@ class ImageAdaptator:
                     dict_colors[i] = colors[i]
                 else:
                     dict_colors[i-1] = colors[i]
-        print(dict_colors)
+        if self.logging: print("Retrieved colorspace = ", dict_colors)
         return dict_colors
 
 
-    def CalibrateAlone(self, img, ref, mask, match_template=False) -> np.array:
-        print('===============================================')
+    def CalibrateAlone(self, img, ref, mask, match_template=False) -> ndarray:
+        '''
+        Calibrate color correction model by given one input image, reference image and reference image mask.
+
+        Parameters:
+            img (ndarray): input image
+            ref (ndarray): reference image
+            mask(ndarray): mask for reference image
+            match_template: flag, representing if input image is already matched with reference
+        '''
+        if self.logging: print('===============================================')
         input_image = img
         ref_image = ref
         ref_mask = mask[:,:,0]
 
-        print(f'||INFO||: Unique minerals in mask {np.unique(ref_mask)}\n')
+        if self.logging: print(f'||INFO||: Unique minerals in mask {np.unique(ref_mask)}\n')
 
         if match_template:
-            print(f'\n||INFO||: Template matching started {self.index}')
+            if self.logging: print(f'\n||INFO||: Template matching started {self.index}')
             
             template_matcher = TemplateMatcher(input_image, ref_image, ref_mask, self.index, self.dir_path)
             res_matcher = template_matcher.get_matched_templates()
             if (res_matcher == None):
-                return
+                return np.zeros((4, 3))
             inp_crops, ref_crops, mask_crops = res_matcher            
-            print(f'||INFO||: Template matching finished {self.index}\n')
+            if self.logging: print(f'||INFO||: Template matching finished {self.index}\n')
         else:
             inp_crops, ref_crops, mask_crops = [input_image], [ref_image],[ref_mask]       
 
         start_time_alone = datetime.datetime.now()
 
-        print(f'\n||INFO||: Extracting colorspaces started {self.index}')
+        if self.logging: print(f'\n||INFO||: Extracting colorspaces started {self.index}')
         colors_extractor = ColorSpacesExtractor(input_image, ref_image, 
                                                 inp_crops, ref_crops, mask_crops, 
                                                 self.index, self.dir_path)
         inp_colors, ref_colors = colors_extractor.extract_colors(True)
-        print(f'||INFO||: Extracting colorspaces finished {self.index}\n')
-        print(f'\n||INFO||: Color calibration started {self.index}')
+        if self.logging: print(f'||INFO||: Extracting colorspaces finished {self.index}\n')
+        if self.logging: print(f'\n||INFO||: Color calibration started {self.index}')
         colors_calibrator = ColorCalibrator(input_image, 
                                             inp_colors, ref_colors, self.index, 
                                             self.result_dir_path,
@@ -108,39 +130,59 @@ class ImageAdaptator:
                                             distance='de00',
                                             gamma = 2,
                                             linear = 'gamma')
-        (result_image, ccm) = colors_calibrator.get_calibrated_image(return_ccm=True)
+        (_, ccm) = colors_calibrator.get_calibrated_image(return_ccm=True)
 
-        print('||STATISTICS||: Working time alone: ', datetime.datetime.now() - start_time_alone)
-        print(f'||INFO||: ColorCalibration finished {self.index}\n')
-        print('===============================================')
+        if self.logging: 
+            print('||STATISTICS||: Working time alone: ', datetime.datetime.now() - start_time_alone)
+            print(f'||INFO||: ColorCalibration finished {self.index}\n')
+            print('===============================================')
         return ccm
     
-    def GetColorSpace(self, img, mask, ref_dict) -> dict:
-        print('===============================================')
+    def GetColorSpace(self, img, mask, ref_dict = None) -> dict:
+        '''
+        Retrieves colorspace from input image by given mask.
+        If ref_dict is specified returns only colors, which are in ref_dict.
+
+        Parameters:
+            img  (ndarray): input image
+            mask (ndarray): mask for input image
+            ref_dict(dict): flag, representing if input image is already matched with reference
+        '''
+        if self.logging: print('===============================================')
         input_image = img
         mask = mask[:,:,0]
 
-        print(f'||INFO||: Unique minerals in mask {np.unique(mask)}\n')     
+        if self.logging: print(f'||INFO||: Unique minerals in mask {np.unique(mask)}\n')     
 
-        print(f'\n||INFO||: Extracting colorspaces started {self.index}')
+        if self.logging: print(f'\n||INFO||: Extracting colorspaces started {self.index}')
         colors_extractor = ColorSpacesExtractor(dir_path=self.dir_path)
         inp_colors = colors_extractor.extract_colors_from_image(input_image, mask, self.index)
-        print(f'||INFO||: Extracting colorspaces finished {self.index}\n')
-        print(f'\n||INFO||: Color calibration started {self.index}')
+        if self.logging: print(f'||INFO||: Extracting colorspaces finished {self.index}\n')
+        if self.logging: print(f'\n||INFO||: Color calibration started {self.index}')
 
         inp_dict = self.GetColorspaceDictionary(inp_colors)
         inp_colors_final = {}
-        print(ref_dict)
+        if self.logging: print(ref_dict)
         for i in inp_dict.keys():
-            print(i, i in ref_dict.keys())
-            if i in ref_dict.keys():
-                inp_colors_final[i] = inp_dict[i]       
+            if ref_dict is not None:
+                print(i, i in ref_dict.keys())
+                if i in ref_dict.keys():
+                    inp_colors_final[i] = inp_dict[i]    
+            else:   
+                inp_colors_final[i] = inp_dict[i]    
         return inp_colors_final
     
     def GetRefAndInputCS(self, ref_dict, inp_dicts_all):
+        '''
+        Retrieves CS matrices from reference CS in dict and list of dicts with input CSs
+
+        Parameters:
+            ref_dict      (dict): reference colorspace in dict
+            inp_dicts_all (dict): list of dicts with input colorspaces
+        '''
         ref_colors = []
         inp_colors_final = []
-        print(inp_dicts_all)
+        if self.logging: print("Input dicts = ", inp_dicts_all)
         by_color = defaultdict(list)
         for color_dict in inp_dicts_all:
             for index, color in color_dict.items():
@@ -152,31 +194,40 @@ class ImageAdaptator:
                 inp_colors_final += [inp_dict[i]]
         ref_colors = np.array(ref_colors)
         inp_colors_final = np.array(inp_colors_final)
-        self.DrawColorSpaceAndSave(inp_colors_final, "inp")
-        self.DrawColorSpaceAndSave(ref_colors, "ref")
+        if self.save_test_imgs: 
+            self.DrawColorSpaceAndSave(inp_colors_final, "inp")
+            self.DrawColorSpaceAndSave(ref_colors, "ref")
         ref_colors = np.squeeze(ref_colors, axis=1)
         inp_colors_final = np.squeeze(inp_colors_final, axis=1)
         return inp_colors_final, ref_colors
 
-    def CalibrateWithoutRefImg(self, img, mask, ref_dict) -> np.array:
-        print('===============================================')
+    def CalibrateWithoutRefImg(self, img, mask, ref_dict) -> ndarray:
+        '''
+        Calibrate color correction model by given one input image, input image mask and reference colorspace in a dict.
+
+        Parameters:
+            img (ndarray): input image
+            mask(ndarray): mask for input image
+            ref_dict      (dict): reference colorspace in dict
+        '''
+        if self.logging: print('===============================================')
         input_image = img
         mask = mask[:,:,0]
 
-        print(f'||INFO||: Unique minerals in mask {np.unique(mask)}\n')     
+        if self.logging: print(f'||INFO||: Unique minerals in mask {np.unique(mask)}\n')     
 
         start_time_alone = datetime.datetime.now()
 
-        print(f'\n||INFO||: Extracting colorspaces started {self.index}')
+        if self.logging: print(f'\n||INFO||: Extracting colorspaces started {self.index}')
         colors_extractor = ColorSpacesExtractor(dir_path=self.dir_path)
         inp_colors = colors_extractor.extract_colors_from_image(input_image, mask, self.index)
-        print(f'||INFO||: Extracting colorspaces finished {self.index}\n')
-        print(f'\n||INFO||: Color calibration started {self.index}')
+        if self.logging: print(f'||INFO||: Extracting colorspaces finished {self.index}\n')
+        if self.logging: print(f'\n||INFO||: Color calibration started {self.index}')
 
         inp_dict = self.GetColorspaceDictionary(inp_colors)
         ref_colors = []
         inp_colors_final = []
-        print(ref_dict)
+
         for i in inp_dict.keys():
             if i in ref_dict.keys():
                 ref_colors += [ref_dict[i]]
@@ -196,15 +247,24 @@ class ImageAdaptator:
                                             distance='de00',
                                             gamma = 2,
                                             linear = 'gamma')
-        (result_image, ccm) = colors_calibrator.get_calibrated_image(return_ccm=True)
+        (_, ccm) = colors_calibrator.get_calibrated_image(return_ccm=True)
 
-        print('||STATISTICS||: Working time alone: ', datetime.datetime.now() - start_time_alone)
-        print(f'||INFO||: ColorCalibration finished {self.index}\n')
-        print('===============================================')
+        if self.logging: 
+            print('||STATISTICS||: Working time alone: ', datetime.datetime.now() - start_time_alone)
+            print(f'||INFO||: ColorCalibration finished {self.index}\n')
+            print('===============================================')
         return ccm
     
-    def CalibrateWithColorSpaces(self, img, inp_cs, ref_cs) -> np.array:
-        print('===============================================')
+    def CalibrateWithColorSpaces(self, img, inp_cs, ref_cs) -> ndarray:
+        '''
+        Calibrate color correction model by given one input image, input and reference colorspaces in matrices.
+
+        Parameters:
+            img    (ndarray): input image
+            inp_cs (ndarray): input colorspace matrix
+            ref_cs (ndarray): reference colorspace matrix
+        '''
+        if self.logging: print('===============================================')
         input_image = img
 
         colors_calibrator = ColorCalibrator(input_image, 
@@ -215,10 +275,11 @@ class ImageAdaptator:
                                             distance='de00',
                                             gamma = 2,
                                             linear = 'gamma')
-        (result_image, ccm) = colors_calibrator.get_calibrated_image(return_ccm=True)
+        (_, ccm) = colors_calibrator.get_calibrated_image(return_ccm=True)
 
-        print(f'||INFO||: ColorCalibration finished {self.index}\n')
-        print('===============================================')
+        if self.logging: 
+            print(f'||INFO||: ColorCalibration finished {self.index}\n')
+            print('===============================================')
         return ccm
 
     def GetMaskPercentage(self, mask) -> int:
@@ -226,7 +287,7 @@ class ImageAdaptator:
         not_zero = np.sum(mask[:,:,0] != 0)
         return not_zero / (h * w)
 
-    def GetResultCCM(self, masks, ccms) -> np.array:
+    def GetResultCCM(self, masks, ccms) -> ndarray:
         percentages = []
         for mask in masks:
             percentages.append(self.GetMaskPercentage(mask))
@@ -235,8 +296,15 @@ class ImageAdaptator:
         return np.sum(ccms * percentages[:,None,None], axis=0)
 
     def InferImage(self, img, ccm):
-        print('===============================================')
-        print(f'\n||INFO||: Applying color correction matrix {self.index}')
+        '''
+        Applies given color correction matrix to the input image.
+
+        Parameters:
+            img    (ndarray): input image
+            ccm    (ndarray): color correction matrix
+        '''
+        if self.logging: print('===============================================')
+        if self.logging: print(f'\n||INFO||: Applying color correction matrix {self.index}')
 
         start_time_apply = datetime.datetime.now()
 
@@ -248,9 +316,9 @@ class ImageAdaptator:
 
         result_image = colors_calibrator.apply_calibrating_mask(ccm)
         
-        print('||STATISTICS||: Working time apply: ', datetime.datetime.now() - start_time_apply)
+        if self.logging: 
+            print('||STATISTICS||: Working time apply: ', datetime.datetime.now() - start_time_apply)
 
-
-        print(f'||INFO||: Applying CCM finished {self.index}\n')
-        print('===============================================')
+            print(f'||INFO||: Applying CCM finished {self.index}\n')
+            print('===============================================')
         return result_image
