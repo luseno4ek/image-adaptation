@@ -107,116 +107,29 @@ CALIBRATE_ALONE : int = size
 GET_MASK_FROM: int = 0
 ccms = []
 
+image_adaptator = ImageAdaptator(0, dir_path, result_dir_path, main_path)
+
 for i in range(0,CALIBRATE_ALONE):
-    print('===============================================')
-    print(f'\n||INFO||: Template matching started {i+1}/{size}')
-    input_image = input_images[i]
-    ref_image = ref_images[i]
-    ref_mask = masks[i]
-
-    template_matcher = TemplateMatcher(input_image, ref_image, ref_mask, i + 1, dir_path)
-    res_matcher = template_matcher.get_matched_templates()
-    if (res_matcher == None):
-        continue
-    
-    inp_crops, ref_crops, mask_crops = [input_image], [ref_image],[ref_mask[:,:,0]]       
-    
-    print(f'||INFO||: Unique minerals in mask {np.unique(ref_mask)}\n')
-    
-    start_time_alone = datetime.datetime.now()
-
-    print(f'\n||INFO||: Extracting colorspaces started {i+1}/{size}')
-    colors_extractor = ColorSpacesExtractor(input_image, ref_image, 
-                                            inp_crops, ref_crops, mask_crops, i + 1, dir_path)
-    inp_colors, ref_colors = colors_extractor.extract_colors()
-    print(f'||INFO||: Extracting colorspaces finished {i+1}/{size}\n')
-    print(f'\n||INFO||: Color calibration started {i+1}/{size}')
-    colors_calibrator = ColorCalibrator(input_image, 
-                                        inp_colors, ref_colors, i + 1, 
-                                        result_dir_path,
-                                        main_path,
-                                        ccm_shape='4x3',
-                                        distance='de00',
-                                        gamma = 2,
-                                        linear = 'gamma')
-    (result_image, ccm) = colors_calibrator.get_calibrated_image(return_ccm=True)
+    ccm = image_adaptator.CalibrateAlone(input_images[i], ref_images[i], masks[i],
+                                         match_template= True)
     ccms.append(ccm)
-    print('||STATISTICS||: Working time alone: ', datetime.datetime.now() - start_time_alone);
-    print(f'||INFO||: ColorCalibration finished {i+1}/{size}\n')
-    print('===============================================')
+    image_adaptator.index += 1
 
 last_ccm = None
 
-
 if GET_MASK_FROM == 0:
     last_ccm = ccms[-1]
-    start_time = datetime.datetime.now()
 else:
-    print('===============================================')
-    print(f'\n||INFO||: Getting reference CCM from img {GET_MASK_FROM}\n')
-    print('===============================================')
-    print(f'\n||INFO||: Template matching started')
     input_image = input_images[GET_MASK_FROM-1]
     ref_image = ref_images[GET_MASK_FROM-1]
     ref_mask = masks[GET_MASK_FROM-1]
-
-    template_matcher = TemplateMatcher(input_image, ref_image, ref_mask, GET_MASK_FROM, dir_path)
-    res_matcher = template_matcher.get_matched_templates()
-    
-    inp_crops, ref_crops, mask_crops = res_matcher        
-
-    print(f'||INFO||: Template matching finished \n')
-
-    start_time = datetime.datetime.now()
-
-    print(f'\n||INFO||: Extracting colorspaces started')
-    colors_extractor = ColorSpacesExtractor(input_image, ref_image, 
-                                            inp_crops, ref_crops, mask_crops, 
-                                            GET_MASK_FROM, dir_path)
-    inp_colors, ref_colors = colors_extractor.extract_colors()
-    print(f'||INFO||: Extracting colorspaces finished \n')
-    print(f'\n||INFO||: Color calibration started')
-    colors_calibrator = ColorCalibrator(input_image, 
-                                        inp_colors, ref_colors, GET_MASK_FROM, 
-                                        result_dir_path,
-                                        main_path,
-                                        ccm_shape='4x3',
-                                        distance='de00',
-                                        gamma = 2,
-                                        linear = 'gamma')
-    (result_image, ccm) = colors_calibrator.get_calibrated_image(return_ccm=True)
-    last_ccm = ccm
-    print(f'||INFO||: ColorCalibration finished \n')
-    print('===============================================')
-
+    image_adaptator.index = GET_MASK_FROM-1
+    last_ccm = image_adaptator.CalibrateAlone(input_image, ref_image, ref_mask, match_template=True)
 
 
 for i in range(CALIBRATE_ALONE, size):
-    print('===============================================')
-    print(f'\n||INFO||: Applying color correction matrix {i+1}/{size}')
     input_image = input_images[i]
-    ref_image = ref_images[i]
-    ref_mask = masks[i]
 
-    start_time_apply = datetime.datetime.now()
-
-    colors_calibrator = ColorCalibrator(input_image, 
-                                        None, None, i + 1, 
-                                        result_dir_path,
-                                        main_path,
-                                        only_infer=True)
-
-    result_image = colors_calibrator.apply_calibrating_mask(last_ccm)
-    
-    print('||STATISTICS||: Working time apply: ', datetime.datetime.now() - start_time_apply)
-
-
-    print(f'||INFO||: Applying CCM finished {i+1}/{size}\n')
-    print('===============================================')
+    image_adaptator.InferImage(input_image, last_ccm)    
 
 print('||INFO||: Image adaptation finished\n')
-
-print('||STATISTICS||: Working time: ', datetime.datetime.now() - start_time);
-
-
-
