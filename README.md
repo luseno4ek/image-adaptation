@@ -23,7 +23,7 @@ def GetRefColorSpace(self, images, masks, name) -> Dict:
     '''
 ```
 
-## Тестопый пайплайн
+## Тестовый пайплайн
 
 Тестовый пайплайн работы с классом ImageAdaptator представлен в файле [image_adaptation_test_pipeline](https://github.com/luseno4ek/image-adaptation/blob/main/image_adaptation_test_pipeline.py).
 
