@@ -25,7 +25,7 @@ def GetRefColorSpace(self, images, masks, name) -> Dict:
 
 ## Приблизительный пайплайн
 
-Приблизительный пайплайн работы с классом ImageAdaptator представлен в файле []().
+Приблизительный пайплайн работы с классом ImageAdaptator представлен в файле [image_adaptation_test_pipeline](https://github.com/luseno4ek/image-adaptation/blob/main/image_adaptation_test_pipeline.py).
 
 Логика работы тестового пайплайна:
 - Входные данные - 8 искаженных изображений, 8 масок для искаженных изображений, 1 референсное изображение, совмещенное с маской №1
