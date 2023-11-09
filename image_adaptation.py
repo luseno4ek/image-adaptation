@@ -30,7 +30,7 @@ class ImageAdaptator:
         self.logging = logging
         self.save_test_imgs = save_test_imgs
         
-    def DrawColorSpaceAndSave(self, colors, name):
+    def __drawColorSpaceAndSave(self, colors, name):
         colors_without_none = []
         for i in range(len(colors)):
             color = colors[i][0][0]
@@ -65,13 +65,13 @@ class ImageAdaptator:
             colors.append(ref_colors)
         colors = np.array(colors)
         ref_cs = np.nanmean(colors, axis=0)
-        if self.save_test_imgs: self.DrawColorSpaceAndSave(ref_cs, name)
-        cs_dict = self.GetColorspaceDictionary(ref_cs)
+        if self.save_test_imgs: self.__drawColorSpaceAndSave(ref_cs, name)
+        cs_dict = self.__getColorspaceDictionary(ref_cs)
         with open(f'{self.main_path}/colorspace.pkl', 'wb') as f:
             pickle.dump(cs_dict, f)
         return cs_dict
     
-    def GetColorspaceDictionary(self, colors, ref_images = False) -> Dict:
+    def __getColorspaceDictionary(self, colors, ref_images = False) -> Dict:
         dict_colors = {}
         for i in range(len(colors)):
             color = colors[i][0][0]
@@ -160,7 +160,7 @@ class ImageAdaptator:
         if self.logging: print(f'||INFO||: Extracting colorspaces finished {self.index}\n')
         if self.logging: print(f'\n||INFO||: Color calibration started {self.index}')
 
-        inp_dict = self.GetColorspaceDictionary(inp_colors)
+        inp_dict = self.__getColorspaceDictionary(inp_colors)
         inp_colors_final = {}
         if self.logging: print(ref_dict)
         for i in inp_dict.keys():
@@ -195,8 +195,8 @@ class ImageAdaptator:
         ref_colors = np.array(ref_colors)
         inp_colors_final = np.array(inp_colors_final)
         if self.save_test_imgs: 
-            self.DrawColorSpaceAndSave(inp_colors_final, "inp")
-            self.DrawColorSpaceAndSave(ref_colors, "ref")
+            self.__drawColorSpaceAndSave(inp_colors_final, "inp")
+            self.__drawColorSpaceAndSave(ref_colors, "ref")
         ref_colors = np.squeeze(ref_colors, axis=1)
         inp_colors_final = np.squeeze(inp_colors_final, axis=1)
         return inp_colors_final, ref_colors
@@ -224,7 +224,7 @@ class ImageAdaptator:
         if self.logging: print(f'||INFO||: Extracting colorspaces finished {self.index}\n')
         if self.logging: print(f'\n||INFO||: Color calibration started {self.index}')
 
-        inp_dict = self.GetColorspaceDictionary(inp_colors)
+        inp_dict = self.__getColorspaceDictionary(inp_colors)
         ref_colors = []
         inp_colors_final = []
 
@@ -282,15 +282,23 @@ class ImageAdaptator:
             print('===============================================')
         return ccm
 
-    def GetMaskPercentage(self, mask) -> int:
+    def __getMaskPercentage(self, mask) -> int:
         h, w, _ = mask.shape
         not_zero = np.sum(mask[:,:,0] != 0)
         return not_zero / (h * w)
 
     def GetResultCCM(self, masks, ccms) -> ndarray:
+        '''
+        Returns weighted mean of list of CCMs depending on partial masks.
+        Weigths are higher for CCMs with the more filled mask.
+
+        Parameters:
+            masks  (list of ndarray): list of partial masks
+            ccms   (list of ndarray): list of CCMs
+        '''
         percentages = []
         for mask in masks:
-            percentages.append(self.GetMaskPercentage(mask))
+            percentages.append(self.__getMaskPercentage(mask))
         percentages = np.array(percentages)
         percentages = percentages / np.sum(percentages)
         return np.sum(ccms * percentages[:,None,None], axis=0)
