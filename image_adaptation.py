@@ -56,6 +56,9 @@ class ImageAdaptator:
             masks  (list of ndarrays): masks for input images
             name                (str): name of experiment, used to save colorspace image file
         '''
+        if self.logging: 
+            print('===============================================')
+            print('||INFO||:    Retrieving reference colorspace started')
         colors = []
         for i in range(len(images)):
             ref_image = images[i]
@@ -67,8 +70,10 @@ class ImageAdaptator:
         ref_cs = np.nanmean(colors, axis=0)
         if self.save_test_imgs: self.__drawColorSpaceAndSave(ref_cs, name)
         cs_dict = self.__getColorspaceDictionary(ref_cs)
-        with open(f'{self.main_path}/colorspace.pkl', 'wb') as f:
+        with open(f'{self.main_path}/colorspace_{name}.pkl', 'wb') as f:
             pickle.dump(cs_dict, f)
+        if self.logging: 
+            print('===============================================')
         return cs_dict
     
     def __getColorspaceDictionary(self, colors, ref_images = False) -> Dict:
